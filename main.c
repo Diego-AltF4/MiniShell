@@ -77,47 +77,84 @@ void setIO(int io_current[], int input_next, int isLast, char *redirect_error){
     }
 }
 
-void processAndExec(char * buf){
-    tline * line;
-    line = tokenize(buf);
+void executeCD(char *argumentos){
 
-    int pipefd[2], io_act[2], in_next = 0, i;
-    pid_t pid;
-
-    //si es input open, in_next=open
-    if (line->redirect_input)
-        in_next = open(line->redirect_input, O_RDONLY);
-
-    for (i = 0; i < line->ncommands; i++) {
-        int isLast = (i==line->ncommands - 1);
-        preparePipe(&io_act, &in_next, &pipefd, isLast);
-        
-        //si es output open, act[1]=open
-        if (isLast && line->redirect_output)
-            io_act[1] = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-
-        pid = fork();
-        if (pid == -1){
-            fprintf(stderr,"Problema al ejecutar fork\n");
+    char *home = getenv("HOME");
+    char *path;
+    char *spl;
+    spl = strtok(argumentos, " ");
+    int contador = 0;
+    while (spl != NULL){
+        if (contador > 1){
+            fprintf(stderr,"Has pasado demasiados argumentos al mandato cd\n");
             exit (-1);
         }
+        path = spl;
+        spl = strtok(NULL, " ");
+        contador++;
+    }
+    if (contador == 1){
+        path = home;
+    }
+    path[strcspn(path, "\n")] = 0;
+    int out = chdir(path);
+    if (out == -1){
+        fprintf(stderr,"Ha habido un problema al cambiar de directorio\n");
+        perror("Error printed by cd");
+    }
+/*  int out = chdir(buf);
+    if (out == -1){
+        fprintf(stderr,"Ha habido un problema\n");
+    }else{
+        fprintf(stderr,"Cambio correcto\n");
+    }*/
+}
 
-        if (!pid) {
-            /*char tmp[1024];  //for debugging
-            sprintf(tmp, "ls -la /proc/%d/fd >&2",getpid());
-            system(tmp);*/
-            setIO(io_act, in_next, isLast, line->redirect_error);
-            /*sprintf(tmp, "ls -la /proc/%d/fd >&2",getpid());
-            system(tmp);*/
-            execvp(line->commands[i].filename, line->commands[i].argv);
-            fprintf(stderr,"Error al ejecutar el comando");
-        }else{
-            wait(NULL);
-            if(io_act[0] != 0){
-                close(io_act[0]);
+void processAndExec(char * buf){
+    if (strstr(buf, "cd") != NULL) {
+        executeCD(buf);
+    }else{
+        tline * line;
+        line = tokenize(buf);
+
+        int pipefd[2], io_act[2], in_next = 0, i;
+        pid_t pid;
+
+        //si es input open, in_next=open
+        if (line->redirect_input)
+            in_next = open(line->redirect_input, O_RDONLY);
+
+        for (i = 0; i < line->ncommands; i++) {
+            int isLast = (i==line->ncommands - 1);
+            preparePipe(&io_act, &in_next, &pipefd, isLast);
+            
+            //si es output open, act[1]=open
+            if (isLast && line->redirect_output)
+                io_act[1] = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+
+            pid = fork();
+            if (pid == -1){
+                fprintf(stderr,"Problema al ejecutar fork\n");
+                exit (-1);
             }
-            if(io_act[1] != 1) {
-                close(io_act[1]);
+
+            if (!pid) {
+                setIO(io_act, in_next, isLast, line->redirect_error);
+                /*char tmp[1024];  //for debugging
+                sprintf(tmp, "ls -la /proc/%d/fd >&2",getpid());
+                system(tmp);*/
+                /*sprintf(tmp, "ls -la /proc/%d/fd >&2",getpid());
+                system(tmp);*/
+                execvp(line->commands[i].filename, line->commands[i].argv);
+                fprintf(stderr,"Error al ejecutar el comando");
+            }else{
+                wait(NULL);
+                if(io_act[0] != 0){
+                    close(io_act[0]);
+                }
+                if(io_act[1] != 1) {
+                    close(io_act[1]);
+                }
             }
         }
     }
@@ -136,9 +173,7 @@ int main() {
         char *command_buffer;
         command_buffer = calloc(DEFAULT_BUFFER_SIZE, sizeof(char)); // free this
         fgets(command_buffer, DEFAULT_BUFFER_SIZE, stdin);
-
         processAndExec(command_buffer);
-
         free(command_buffer);
     }
     return 0;
