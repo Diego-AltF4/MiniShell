@@ -48,31 +48,26 @@ void printPrompt(){
 
 // stdout de act -> pipefd[0]
 // stdin de next -> pipefd[1]
-void preparePipe(int (*io_current)[2], int *input_next, int *output_previous, int (*pipefd)[2] , int isLast){
-    printf("input_next %i\n", *input_next);
+void preparePipe(int (*io_current)[2], int *input_next, int (*pipefd)[2] , int isLast){
     (*io_current)[0] = *input_next;
-    *output_previous = (*io_current)[1];
     (*io_current)[1] = 1;
     *input_next = 0;
     if (!isLast){
         pipe(*pipefd);
-        printf("pipefd[0] = %i\n", (*pipefd)[0]);
-        printf("pipefd[1] = %i\n", (*pipefd)[1]);
         (*io_current)[1] = (*pipefd)[1];
         (*input_next) = (*pipefd)[0];
     }
-    printf("io_current[0] = %i\n", (*io_current)[0]);
-    printf("io_current[1] = %i\n", (*io_current)[1]);
 }
 
-void setIO(int io_current[], int input_next, int output_previous){
+void setIO(int io_current[], int input_next){
     if (io_current[0] != 0){ //no es el primer mandato
-        close(output_previous);
         dup2(io_current[0],0);
+        close(io_current[0]);
     }
     if (io_current[1] != 1){ //no es el último mandato
         close(input_next);
         dup2(io_current[1],1);
+        close(io_current[1]);
     }
 }
 
@@ -80,7 +75,7 @@ void processAndExec(char * buf){
     tline * line;
     line = tokenize(buf);
 
-    int pipefd[2], io_act[2], in_next = 0, out_prev, i;
+    int pipefd[2], io_act[2], in_next = 0, i;
     pid_t pid;
 
     for (i = 0; i < line->ncommands; i++) {
@@ -91,8 +86,8 @@ void processAndExec(char * buf){
             printf("fd del fichero %i\n", fd);
             in_next = fd;
         }
-         */
-        preparePipe(&io_act, &in_next, &out_prev, &pipefd, i>=line->ncommands - 1);
+        */
+        preparePipe(&io_act, &in_next, &pipefd, i>=line->ncommands - 1);
         //si es output open, act[1]=open
         pid = fork();
         if (pid == -1){
@@ -101,7 +96,7 @@ void processAndExec(char * buf){
         }
 
         if (!pid) {
-            setIO(io_act, in_next, out_prev);
+            setIO(io_act, in_next);
             execvp(line->commands[i].filename, line->commands[i].argv);
             fprintf(stderr,"Error al ejecutar el comando");
         }else{

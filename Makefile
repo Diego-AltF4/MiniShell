@@ -5,4 +5,3 @@ msh: main.c
 	$(CC) $? $(WARNINGS) $(LIB) -o $@ 
 clean:
 	rm msh
-	$(MAKE)
