@@ -1,5 +1,5 @@
 CC = gcc
-WARNINGS = -Wall -Wextra -no-pie
+WARNINGS = -Wall -Wextra -static
 LIB = ArchivosDados/libparser.a
 msh: main.c
 	$(CC) $? $(WARNINGS) $(LIB) -o $@ 
