@@ -62,28 +62,13 @@ void printPrompt(){
 
 void handleSignals(){
     puts("");
-    if (executing)
-        return;
-    printPrompt();
-}
-
-void childHandler() {
-    pid_t child_pid;
-    while ((child_pid = waitpid(-1, NULL, WNOHANG | WUNTRACED)) > 0) {
-        for (int i = 0; i < MAX_JOBS; i++) {
-            if (jobs[i].lastPid == child_pid) {
-                jobs[i].state = TERMINATED;
-                jobs[i].lastPid = 0;
-                printf("\n[%d]+ Hecho\t%s\n", i, jobs[i].commands);
-                free(jobs[i].commands);
-                jobs[i].commands = NULL;
-            }
-        }
-    }
+    if (!executing)
+        printPrompt();
 }
 
 void addJob(char * commands, pid_t pid){
     int num = -1;
+    int commands_len = 0;
     for (int i = 0; i < MAX_JOBS; ++i){
         if (jobs[i].state == TERMINATED){
             num = i;
@@ -95,9 +80,68 @@ void addJob(char * commands, pid_t pid){
         return;
     }
     jobs[num].lastPid = pid;
-    jobs[num].commands = malloc(strlen(commands));
+    commands_len = strlen(commands);
+    jobs[num].commands = malloc(commands_len);
     strcpy(jobs[num].commands, commands);
+    jobs[num].commands[commands_len-1] = 0;
     jobs[num].state = RUNNING;
+}
+
+void removeJob(int toRemoveId){
+    jobs[toRemoveId].state = TERMINATED;
+    jobs[toRemoveId].lastPid = 0;
+    free(jobs[toRemoveId].commands);
+    jobs[toRemoveId].commands = NULL;
+}
+
+void getJobs(){
+    for (int i = 0; i < MAX_JOBS; ++i){
+        if (jobs[i].state != TERMINATED)
+            printf("[%d] Ejecutando\t%s\n", i, jobs[i].commands);
+    }
+}
+
+void job2Foreground(tline *line){
+    int jobId = -1;
+    if (line->commands[0].argc == 1){
+
+        for (int i = 0; i < MAX_JOBS; ++i){
+            if (jobs[i].state != TERMINATED)
+                jobId = i;
+        }
+        if (jobId == -1){
+            fprintf(stderr, "msh: fg: No hay ningún job actualmente\n");
+            return;
+        }
+
+    }else{
+
+        jobId = atoi(line->commands[0].argv[1]);
+        if (jobId < 0 || jobId >= MAX_JOBS || jobs[jobId].state == TERMINATED){
+            fprintf(stderr, "msh: fg: %d: No existe ese job\n", jobId);
+            return;
+        }
+    
+    }
+
+    waitpid(jobs[jobId].lastPid, NULL, 0);
+    removeJob(jobId);
+}
+
+void childHandler() {
+    pid_t child_pid;
+    int found = 0;
+    while ((child_pid = waitpid(-1, NULL, WNOHANG | WUNTRACED)) > 0) {
+        for (int i = 0; i < MAX_JOBS; i++) {
+            if (jobs[i].lastPid == child_pid) {
+                found = 1;
+                printf("\n[%d] Hecho\t%s\n", i, jobs[i].commands);
+                removeJob(i);
+            }
+        }
+    }
+    if (!executing && found)
+        printPrompt();
 }
 
 // stdout de act -> pipefd[0]
@@ -149,6 +193,12 @@ int isBuiltin(tline *line){
         if (err == -1)
             perror("msh: cd");
         
+        return 1;
+    }else if(!strcmp("jobs",line->commands[0].argv[0])){
+        getJobs();
+        return 1;
+    }else if(!strcmp("fg",line->commands[0].argv[0])){
+        job2Foreground(line);
         return 1;
     }
     return 0;
@@ -208,9 +258,9 @@ void processAndExec(char * buf){
             }
 
             if (line->background){
-                waitpid(pid, NULL, WNOHANG);
+                waitpid(pid, NULL, WNOHANG | WUNTRACED);
             }else{
-                wait(NULL);
+                waitpid(pid, NULL, 0);
             }
         }
     }
