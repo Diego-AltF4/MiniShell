@@ -15,14 +15,19 @@
 #include <signal.h>
 
 #define DEFAULT_BUFFER_SIZE 1024
+#define MAX_JOBS 1024
+
+
+#define TERMINATED 0
+#define RUNNING 1
 
 typedef struct{
-    tcommand * command;
+    char * commands;
+    pid_t lastPid;
     short state;
-    int number;
 } job;
 
-job * jobs;
+job jobs[MAX_JOBS];
 int executing = 0;
 
 void printPrompt(){
@@ -55,11 +60,44 @@ void printPrompt(){
     free(pwd);
 }
 
-void handle_signals(){
+void handleSignals(){
     puts("");
     if (executing)
         return;
     printPrompt();
+}
+
+void childHandler() {
+    pid_t child_pid;
+    while ((child_pid = waitpid(-1, NULL, WNOHANG | WUNTRACED)) > 0) {
+        for (int i = 0; i < MAX_JOBS; i++) {
+            if (jobs[i].lastPid == child_pid) {
+                jobs[i].state = TERMINATED;
+                jobs[i].lastPid = 0;
+                printf("\n[%d]+ Hecho\t%s\n", i, jobs[i].commands);
+                free(jobs[i].commands);
+                jobs[i].commands = NULL;
+            }
+        }
+    }
+}
+
+void addJob(char * commands, pid_t pid){
+    int num = -1;
+    for (int i = 0; i < MAX_JOBS; ++i){
+        if (jobs[i].state == TERMINATED){
+            num = i;
+            break;
+        }
+    }
+    if (num == -1){
+        fprintf(stderr, "msh: No hay espacio para crear más jobs\n");
+        return;
+    }
+    jobs[num].lastPid = pid;
+    jobs[num].commands = malloc(strlen(commands));
+    strcpy(jobs[num].commands, commands);
+    jobs[num].state = RUNNING;
 }
 
 // stdout de act -> pipefd[0]
@@ -96,24 +134,24 @@ void setIO(int io_current[], int input_next, int isLast, char *redirect_error){
 
 int isBuiltin(tline *line){
     int err;
-    if (strcmp("cd",line->commands[0].argv[0]))
-        return 0;
+    if (!strcmp("cd",line->commands[0].argv[0])){
+        if (line->ncommands > 1){
+            fprintf(stderr,"msh: cd: No se debe usar con pipes\n");
+            return 1;
+        }
 
-    if (line->ncommands > 1){
-        fprintf(stderr,"msh: cd: No se debe usar con pipes\n");
+        if (line->commands[0].argc > 2){
+            fprintf(stderr,"msh: cd: Demasiados argumentos\n");
+            return 1;
+        }
+
+        err = chdir(line->commands[0].argc == 1? getenv("HOME") : line->commands[0].argv[1]);
+        if (err == -1)
+            perror("msh: cd");
+        
         return 1;
     }
-
-    if (line->commands[0].argc > 2){
-        fprintf(stderr,"msh: cd: Demasiados argumentos\n");
-        return 1;
-    }
-
-    err = chdir(line->commands[0].argc == 1?getenv("HOME"):line->commands[0].argv[1]);
-    if (err == -1){
-        perror("msh: cd");
-    }
-    return 1;
+    return 0;
 }
 
 void processAndExec(char * buf){
@@ -132,6 +170,9 @@ void processAndExec(char * buf){
     //si es input open, in_next=open
     if (line->redirect_input)
         in_next = open(line->redirect_input, O_RDONLY);
+    else if (line->background)
+        in_next = open("/dev/null", O_RDONLY);
+
 
     for (i = 0; i < line->ncommands; i++) {
         isLast = (i==line->ncommands - 1);
@@ -159,15 +200,22 @@ void processAndExec(char * buf){
             execvp(line->commands[i].filename, line->commands[i].argv);
             perror("msh: Error al ejecutar commando");
         }else{
-            wait(NULL);
-            if(io_act[0] != 0){
+            if (io_act[0] != 0){
                 close(io_act[0]);
             }
-            if(io_act[1] != 1) {
+            if (io_act[1] != 1){
                 close(io_act[1]);
+            }
+
+            if (line->background){
+                waitpid(pid, NULL, WNOHANG);
+            }else{
+                wait(NULL);
             }
         }
     }
+    if (line->background)
+        addJob(buf, pid);
 }
 
 
@@ -175,8 +223,13 @@ int main() {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stdin, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-    signal(2, handle_signals);
-    signal(3, handle_signals);
+    signal(SIGINT, handleSignals);
+    signal(SIGQUIT, handleSignals);
+    signal(SIGCHLD, childHandler);
+
+    for (int i = 0; i < MAX_JOBS; ++i){
+        jobs[i].state = TERMINATED;
+    }
 
     char *command_buffer = calloc(DEFAULT_BUFFER_SIZE, sizeof(char)); // free this
 
