@@ -123,7 +123,6 @@ void job2Foreground(tline *line){
         }
     
     }
-
     waitpid(jobs[jobId].lastPid, NULL, 0);
     removeJob(jobId);
 }
@@ -220,8 +219,8 @@ void processAndExec(char * buf){
     //si es input open, in_next=open
     if (line->redirect_input)
         in_next = open(line->redirect_input, O_RDONLY);
-    else if (line->background)
-        in_next = open("/dev/null", O_RDONLY);
+    /*else if (line->background)
+        in_next = open("/dev/null", O_RDONLY);*/
 
 
     for (i = 0; i < line->ncommands; i++) {
@@ -239,6 +238,12 @@ void processAndExec(char * buf){
         }
 
         if (!pid) {
+            signal(SIGINT, SIG_DFL);
+            signal(SIGQUIT, SIG_DFL);
+            signal(SIGCHLD, SIG_DFL);
+            if (line->background)
+                setpgid(0,0);
+
             setIO(io_act, in_next, isLast, line->redirect_error);
                 /*char tmp[1024];  //for debugging
                 sprintf(tmp, "ls -la /proc/%d/fd >&2",getpid());
