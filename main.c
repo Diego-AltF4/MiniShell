@@ -131,7 +131,7 @@ void job2Foreground(tline *line){
     to_kill = getpgid(jobs[jobId].lastPid);
     signal(SIGINT, handleSignalsInFG);
     signal(SIGQUIT, handleSignalsInFG);
-    waitpid(jobs[jobId].lastPid, NULL, 0);
+    waitpid(-to_kill, NULL, 0);
     signal(SIGINT, handleSignals);
     signal(SIGQUIT, handleSignals);
     removeJob(jobId);
