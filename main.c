@@ -29,6 +29,7 @@ typedef struct{
 
 job jobs[MAX_JOBS];
 int executing = 0;
+pid_t to_kill; /* with ctrl+C and ctrl+\ */
 
 void printPrompt(){
     char hostname[HOST_NAME_MAX];
@@ -64,6 +65,10 @@ void handleSignals(){
     puts("");
     if (!executing)
         printPrompt();
+}
+
+void handleSignalsInFG(int signum){
+    kill(-to_kill, signum);
 }
 
 void addJob(char * commands, pid_t pid){
@@ -123,7 +128,12 @@ void job2Foreground(tline *line){
         }
     
     }
+    to_kill = getpgid(jobs[jobId].lastPid);
+    signal(SIGINT, handleSignalsInFG);
+    signal(SIGQUIT, handleSignalsInFG);
     waitpid(jobs[jobId].lastPid, NULL, 0);
+    signal(SIGINT, handleSignals);
+    signal(SIGQUIT, handleSignals);
     removeJob(jobId);
 }
 
@@ -207,6 +217,7 @@ void processAndExec(char * buf){
     tline * line;
     int pipefd[2], io_act[2], in_next = 0, i, isLast;
     pid_t pid;
+    pid_t bg_pgid = 0; // for background processes
 
     line = tokenize(buf);
 
@@ -242,7 +253,7 @@ void processAndExec(char * buf){
             signal(SIGQUIT, SIG_DFL);
             signal(SIGCHLD, SIG_DFL);
             if (line->background)
-                setpgid(0,0);
+                setpgid(0, bg_pgid);
 
             setIO(io_act, in_next, isLast, line->redirect_error);
                 /*char tmp[1024];  //for debugging
@@ -261,6 +272,8 @@ void processAndExec(char * buf){
             if (io_act[1] != 1){
                 close(io_act[1]);
             }
+            if (bg_pgid == 0)
+                bg_pgid = pid;
 
             if (line->background){
                 waitpid(pid, NULL, WNOHANG | WUNTRACED);
