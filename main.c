@@ -23,6 +23,7 @@
 
 typedef struct{
     char * commands;
+    int ncommands;
     pid_t lastPid;
     short state;
 } job;
@@ -61,6 +62,15 @@ void printPrompt(){
     free(pwd);
 }
 
+void killchilds(){
+    for (int i = 0; i < MAX_JOBS; ++i)
+    {
+        if(jobs[i].state != TERMINATED){
+            kill(-getpgid(jobs[i].lastPid), SIGKILL);
+        }
+    }
+}
+
 void handleSignals(){
     puts("");
     if (!executing)
@@ -71,7 +81,7 @@ void handleSignalsInFG(int signum){
     kill(-to_kill, signum);
 }
 
-void addJob(char * commands, pid_t pid){
+void addJob(char * commands, pid_t pid, int ncommands){
     int num = -1;
     int commands_len = 0;
     for (int i = 0; i < MAX_JOBS; ++i){
@@ -90,6 +100,7 @@ void addJob(char * commands, pid_t pid){
     strcpy(jobs[num].commands, commands);
     jobs[num].commands[commands_len-1] = 0;
     jobs[num].state = RUNNING;
+    jobs[num].ncommands = ncommands;
 }
 
 void removeJob(int toRemoveId){
@@ -131,7 +142,9 @@ void job2Foreground(tline *line){
     to_kill = getpgid(jobs[jobId].lastPid);
     signal(SIGINT, handleSignalsInFG);
     signal(SIGQUIT, handleSignalsInFG);
-    waitpid(-to_kill, NULL, 0);
+    for (int i = 0; i < jobs[jobId].ncommands; ++i){
+        waitpid(-to_kill, NULL, 0);
+    }
     signal(SIGINT, handleSignals);
     signal(SIGQUIT, handleSignals);
     removeJob(jobId);
@@ -283,7 +296,7 @@ void processAndExec(char * buf){
         }
     }
     if (line->background)
-        addJob(buf, pid);
+        addJob(buf, pid, line->ncommands);
 }
 
 
@@ -312,5 +325,6 @@ int main() {
     }
     free(command_buffer);
     puts("");
+    killchilds(); //kill every lasting process
     return 0;
 }
