@@ -34,12 +34,9 @@ pid_t to_kill; /* with ctrl+C and ctrl+\ */
 
 void printPrompt(){
     char hostname[HOST_NAME_MAX];
-    struct passwd *passwd_struct;
     char userSymbol;
     char *pwd;
     int erc;
-
-    passwd_struct = getpwuid(getuid());
 
     erc = gethostname(hostname, HOST_NAME_MAX);
 
@@ -51,13 +48,13 @@ void printPrompt(){
     pwd = get_current_dir_name(); //free this
 
 
-    if (passwd_struct->pw_uid == 0){
+    if (getuid() == 0){
         userSymbol='#';
+        printf("root@%s:%s%c ", hostname, pwd, userSymbol);
     }else{
         userSymbol='$';
+        printf("%s@%s:%s%c " , getenv("USERNAME"), hostname, pwd, userSymbol);
     }
-
-    printf("%s@%s:%s%c ", passwd_struct->pw_name, hostname, pwd, userSymbol);
 
     free(pwd);
 }
@@ -194,7 +191,7 @@ void setIO(int io_current[], int input_next, int isLast, char *redirect_error){
     }
     if(isLast && redirect_error){
         err_fd = open(redirect_error, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (in_next == -1){
+        if (err_fd == -1){
             perror("msh");
             return;
         }
@@ -264,7 +261,7 @@ void processAndExec(char * buf){
         //si es output open, act[1]=open
         if (isLast && line->redirect_output){
             io_act[1] = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-            if (in_next == -1){
+            if (io_act[1] == -1){
                 perror("msh");
             }
         }
