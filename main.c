@@ -280,7 +280,7 @@ void processAndExec(char * buf){
                 /*sprintf(tmp, "ls -la /proc/%d/fd >&2",getpid());
                 system(tmp);*/
             if (!line->commands[i].filename)
-                fprintf(stderr,"msh: %s: Archivo no encontrado\n",line->commands[i].argv[0]);
+                fprintf(stderr,"msh: %s: No se encuentra el mandato\n",line->commands[i].argv[0]);
             execvp(line->commands[i].filename, line->commands[i].argv);
             perror("msh: Error al ejecutar commando");
         }else{
