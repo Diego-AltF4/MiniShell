@@ -194,6 +194,10 @@ void setIO(int io_current[], int input_next, int isLast, char *redirect_error){
     }
     if(isLast && redirect_error){
         err_fd = open(redirect_error, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (in_next == -1){
+            perror("msh");
+            return;
+        }
         dup2(err_fd,2);
         close(err_fd);
     }
@@ -258,8 +262,12 @@ void processAndExec(char * buf){
         preparePipe(&io_act, &in_next, &pipefd, isLast);
             
         //si es output open, act[1]=open
-        if (isLast && line->redirect_output)
-           io_act[1] = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (isLast && line->redirect_output){
+            io_act[1] = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (in_next == -1){
+                perror("msh");
+            }
+        }
 
         pid = fork();
         if (pid == -1){
