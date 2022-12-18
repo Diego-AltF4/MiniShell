@@ -34,9 +34,12 @@ pid_t to_kill; /* with ctrl+C and ctrl+\ */
 
 void printPrompt(){
     char hostname[HOST_NAME_MAX];
+    struct passwd *passwd_struct;
     char userSymbol;
     char *pwd;
     int erc;
+
+    passwd_struct = getpwuid(getuid());
 
     erc = gethostname(hostname, HOST_NAME_MAX);
 
@@ -46,14 +49,16 @@ void printPrompt(){
     }
 
     pwd = get_current_dir_name(); //free this
-    
-    if (getuid() == 0){
+
+
+    if (passwd_struct->pw_uid == 0){
         userSymbol='#';
-        printf("root@%s:%s%c ", hostname, pwd, userSymbol);
     }else{
         userSymbol='$';
-        printf("%s@%s:%s%c " , getenv("USERNAME"), hostname, pwd, userSymbol);
     }
+
+    printf("%s@%s:%s%c ", passwd_struct->pw_name, hostname, pwd, userSymbol);
+
     free(pwd);
 }
 
@@ -74,6 +79,7 @@ void handleSignals(){
 
 void handleSignalsInFG(int signum){
     kill(-to_kill, signum);
+    puts("");
 }
 
 void addJob(char * commands, pid_t pid, int ncommands){
