@@ -241,8 +241,13 @@ void processAndExec(char * buf){
         return;
 
     //si es input open, in_next=open
-    if (line->redirect_input)
+    if (line->redirect_input){
         in_next = open(line->redirect_input, O_RDONLY);
+        if (in_next == -1){
+            perror("msh");
+            return;
+        }
+    }
     /*else if (line->background)
         in_next = open("/dev/null", O_RDONLY);*/
 
